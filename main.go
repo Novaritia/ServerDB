@@ -1,19 +1,21 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"os"
 
-	"golang-crud/handler"
+	"serverdb/ent"
+	"serverdb/handler"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
-func implementServer() {
+func implementServer(client *ent.Client) {
 	os.Setenv("GIN_MODE", "release")
 	gin.SetMode(gin.ReleaseMode)
 
@@ -32,7 +34,7 @@ func implementServer() {
 
 	router := gin.Default()
 
-	handler.RegisterRoute(router)
+	handler.RegisterRoute(router, client)
 
 	err := router.Run(fmt.Sprintf(":%s", PORT))
 	if err != nil {
@@ -41,7 +43,7 @@ func implementServer() {
 	router.Run(fmt.Sprintf("localhost:%s", PORT))
 }
 
-func implementDatabase() {
+func implementDatabase() (*ent.Client, error) {
 	errEnv := godotenv.Load()
 
 	// Checking .env file is exist!
@@ -53,6 +55,12 @@ func implementDatabase() {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
 		log.Fatal("DATABASE_URL is not set in the environment")
+	}
+
+	// Initialize Ent Client
+	client, err := ent.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Ent Connect Database Failed!")
 	}
 
 	// Set *Database and catch an *Error
@@ -67,10 +75,21 @@ func implementDatabase() {
 		log.Fatalf("Could not ping the database: %v", err)
 	}
 
-	fmt.Println("Successfully connected to the PostgreSQL database!")
+	if err := client.Schema.Create(context.Background()); err != nil {
+		log.Fatal("Failed to create schema resources: %w", err)
+	}
+
+	fmt.Println("Successfully connected to the PostgreSQL database")
+	return client, nil
 }
 
 func main() {
-	defer implementServer() // Latest Load (Avoid server load first may cause to not running database)
-	implementDatabase()
+
+	dbclient, err := implementDatabase()
+	if err != nil {
+		log.Fatal("Faild to implement database %w", err)
+	}
+
+	defer implementServer(dbclient) // Latest Load (Avoid server load first may cause to not running database)
+
 }

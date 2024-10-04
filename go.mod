@@ -1,4 +1,4 @@
-module golang-crud
+module serverdb
 
 go 1.23.1
 
